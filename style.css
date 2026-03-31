@@ -134,6 +134,18 @@ button:disabled { opacity: 0.65; cursor: not-allowed; }
   border-bottom: 1px solid var(--line);
 }
 
+.result-item:nth-child(even) {
+  background-color: #f7f7f7;
+}
+
+.result-item:nth-child(odd) {
+  background-color: #ffffff;
+}
+
+.result-item:hover {
+  background: #f8fafc;
+}
+
 .result-item.weight-working {
   opacity: 0.78;
 }
