@@ -119,24 +119,35 @@
 
     const preferredGroup = preferredGroupFromTone(currentTone);
 
-    sortedRows = (data || []).slice().sort((a, b) => {
-      const aWeight = Number.isFinite(Number(a.weight)) ? Number(a.weight) : -1;
-      const bWeight = Number.isFinite(Number(b.weight)) ? Number(b.weight) : -1;
-      if (bWeight !== aWeight) return bWeight - aWeight;
+sortedRows = (data || []).slice().sort((a, b) => {
+  const aWeight = Number.isFinite(Number(a.weight)) ? Number(a.weight) : -1;
+  const bWeight = Number.isFinite(Number(b.weight)) ? Number(b.weight) : -1;
+  if (bWeight !== aWeight) return bWeight - aWeight;
 
-      const aPriority = toneGroup(a.tone) === preferredGroup ? 0 : 1;
-      const bPriority = toneGroup(b.tone) === preferredGroup ? 0 : 1;
-      if (aPriority !== bPriority) return aPriority - bPriority;
+  const queryTone = Number.isFinite(Number(currentTone)) ? Number(currentTone) : 99;
+  const aTone = Number.isFinite(Number(a.tone)) ? Number(a.tone) : 99;
+  const bTone = Number.isFinite(Number(b.tone)) ? Number(b.tone) : 99;
 
-      const aTone = Number.isFinite(Number(a.tone)) ? Number(a.tone) : 99;
-      const bTone = Number.isFinite(Number(b.tone)) ? Number(b.tone) : 99;
-      if (aTone !== bTone) return aTone - bTone;
+  // 第二排序：同 tone 優先
+  const aSameTonePriority = aTone === queryTone ? 0 : 1;
+  const bSameTonePriority = bTone === queryTone ? 0 : 1;
+  if (aSameTonePriority !== bSameTonePriority) return aSameTonePriority - bSameTonePriority;
 
-      const termCompare = String(a.term || '').localeCompare(String(b.term || ''), 'zh-Hant');
-      if (termCompare !== 0) return termCompare;
+  // 第三排序：同組優先（1/2 一組，3/4 一組）
+  const aGroupPriority = toneGroup(aTone) === preferredGroup ? 0 : 1;
+  const bGroupPriority = toneGroup(bTone) === preferredGroup ? 0 : 1;
+  if (aGroupPriority !== bGroupPriority) return aGroupPriority - bGroupPriority;
 
-      return Number(a.id) - Number(b.id);
-    });
+  // 第四排序：tone 數值
+  if (aTone !== bTone) return aTone - bTone;
+
+  // 第五排序：term
+  const termCompare = String(a.term || '').localeCompare(String(b.term || ''), 'zh-Hant');
+  if (termCompare !== 0) return termCompare;
+
+  // 第六排序：id
+  return Number(a.id) - Number(b.id);
+});
 
     totalCount = sortedRows.length;
   }
