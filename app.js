@@ -26,6 +26,7 @@
   let currentFinalVowel = null;
   let currentLastChar = null;
   let currentTone = null;
+  let currentInputLength = 0;
   let currentOffset = 0;
   let finished = false;
   let loadingNow = false;
@@ -46,6 +47,7 @@
     loadingNow = false;
     currentOffset = 0;
     currentTone = null;
+    currentInputLength = 0;
     totalCount = 0;
     sortedRows = [];
     adjustedWeightIds = new Set();
@@ -63,6 +65,10 @@
   function getLastCharacter(text) {
     const chars = Array.from(text);
     return chars.length ? chars[chars.length - 1] : '';
+  }
+
+  function getTextLength(text) {
+    return Array.from(text || '').length;
   }
 
   function toneGroup(tone) {
@@ -93,7 +99,7 @@
   }
 
   function updateStatsText() {
-    stats.textContent = `最後字：${currentLastChar}　韻母：${currentFinalVowel}　聲調：${toneLabel(currentTone)}　排序：先依權重，再同聲優先，再同組優先　目前顯示：${currentOffset} / ${totalCount}`;
+    stats.textContent = `最後字：${currentLastChar}　韻母：${currentFinalVowel}　聲調：${toneLabel(currentTone)}　字數：${currentInputLength}　排序：先依權重，再同字數優先，再同聲優先，再同組優先　目前顯示：${currentOffset} / ${totalCount}`;
   }
 
   async function lookupLastCharacterInfo(lastChar) {
@@ -116,7 +122,7 @@
 
     const { data, error } = await supabase
       .from(TABLE_NAME)
-      .select('id, term, final_vowel, tone, weight')
+      .select('id, term, final_vowel, tone, weight, length')
       .eq('final_vowel', currentFinalVowel)
       .limit(20000);
 
@@ -129,6 +135,14 @@
       const aWeight = Number.isFinite(Number(a.weight)) ? Number(a.weight) : -1;
       const bWeight = Number.isFinite(Number(b.weight)) ? Number(b.weight) : -1;
       if (bWeight !== aWeight) return bWeight - aWeight;
+
+      const queryLength = Number.isFinite(Number(currentInputLength)) ? Number(currentInputLength) : 0;
+      const aLength = Number.isFinite(Number(a.length)) ? Number(a.length) : 0;
+      const bLength = Number.isFinite(Number(b.length)) ? Number(b.length) : 0;
+
+      const aSameLengthPriority = aLength === queryLength ? 0 : 1;
+      const bSameLengthPriority = bLength === queryLength ? 0 : 1;
+      if (aSameLengthPriority !== bSameLengthPriority) return aSameLengthPriority - bSameLengthPriority;
 
       const queryTone = Number.isFinite(Number(currentTone)) ? Number(currentTone) : 99;
       const aTone = Number.isFinite(Number(a.tone)) ? Number(a.tone) : 99;
@@ -232,11 +246,13 @@
 
       row.weight = newWeight;
       weightValue.textContent = String(newWeight);
+
       const meta = itemRoot.querySelector('.meta');
       if (meta) {
-        meta.textContent = `韻母 ${row.final_vowel}｜${toneLabel(row.tone)}｜權重 `;
+        meta.textContent = `韻母 ${row.final_vowel}｜${toneLabel(row.tone)}｜字數 ${row.length ?? ''}｜權重 `;
         meta.appendChild(wrap);
       }
+
       adjustedWeightIds.add(Number(row.id));
       disablePair();
     }
@@ -265,9 +281,11 @@
       const item = node.querySelector('.result-item');
       item.dataset.id = row.id;
       item.querySelector('.term').textContent = row.term;
+
       const meta = item.querySelector('.meta');
-      meta.textContent = `韻母 ${row.final_vowel}｜${toneLabel(row.tone)}｜權重 `;
+      meta.textContent = `韻母 ${row.final_vowel}｜${toneLabel(row.tone)}｜字數 ${row.length ?? ''}｜權重 `;
       meta.appendChild(createWeightControls(row, item));
+
       fragment.appendChild(node);
     });
 
@@ -300,8 +318,9 @@
       return;
     }
 
+    currentInputLength = getTextLength(raw);
     currentLastChar = getLastCharacter(raw);
-    searchInfo.textContent = `輸入詞語：${raw}　→　系統取最後一個字：${currentLastChar}`;
+    searchInfo.textContent = `輸入詞語：${raw}　→　系統取最後一個字：${currentLastChar}　→　輸入字數：${currentInputLength}`;
 
     searchBtn.disabled = true;
     const myToken = ++searchToken;
