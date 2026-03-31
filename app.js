@@ -33,6 +33,7 @@
   let observer = null;
   let searchToken = 0;
   let sortedRows = [];
+  let adjustedWeightIds = new Set();
 
   function resetUI() {
     searchInfo.textContent = '';
@@ -47,6 +48,7 @@
     currentTone = null;
     totalCount = 0;
     sortedRows = [];
+    adjustedWeightIds = new Set();
   }
 
   function showLoading(show, text = '載入中…') {
@@ -86,8 +88,12 @@
     return map[tone] || '未標示';
   }
 
-  function groupLabel(group) {
-    return group === 'B' ? '3/4 聲優先' : '1/2 聲優先';
+  function buttonDisabledForRow(row) {
+    return adjustedWeightIds.has(Number(row.id));
+  }
+
+  function updateStatsText() {
+    stats.textContent = `最後字：${currentLastChar}　韻母：${currentFinalVowel}　聲調：${toneLabel(currentTone)}　排序：先依權重，再同聲優先，再同組優先　目前顯示：${currentOffset} / ${totalCount}`;
   }
 
   async function lookupLastCharacterInfo(lastChar) {
@@ -119,35 +125,30 @@
 
     const preferredGroup = preferredGroupFromTone(currentTone);
 
-sortedRows = (data || []).slice().sort((a, b) => {
-  const aWeight = Number.isFinite(Number(a.weight)) ? Number(a.weight) : -1;
-  const bWeight = Number.isFinite(Number(b.weight)) ? Number(b.weight) : -1;
-  if (bWeight !== aWeight) return bWeight - aWeight;
+    sortedRows = (data || []).slice().sort((a, b) => {
+      const aWeight = Number.isFinite(Number(a.weight)) ? Number(a.weight) : -1;
+      const bWeight = Number.isFinite(Number(b.weight)) ? Number(b.weight) : -1;
+      if (bWeight !== aWeight) return bWeight - aWeight;
 
-  const queryTone = Number.isFinite(Number(currentTone)) ? Number(currentTone) : 99;
-  const aTone = Number.isFinite(Number(a.tone)) ? Number(a.tone) : 99;
-  const bTone = Number.isFinite(Number(b.tone)) ? Number(b.tone) : 99;
+      const queryTone = Number.isFinite(Number(currentTone)) ? Number(currentTone) : 99;
+      const aTone = Number.isFinite(Number(a.tone)) ? Number(a.tone) : 99;
+      const bTone = Number.isFinite(Number(b.tone)) ? Number(b.tone) : 99;
 
-  // 第二排序：同 tone 優先
-  const aSameTonePriority = aTone === queryTone ? 0 : 1;
-  const bSameTonePriority = bTone === queryTone ? 0 : 1;
-  if (aSameTonePriority !== bSameTonePriority) return aSameTonePriority - bSameTonePriority;
+      const aSameTonePriority = aTone === queryTone ? 0 : 1;
+      const bSameTonePriority = bTone === queryTone ? 0 : 1;
+      if (aSameTonePriority !== bSameTonePriority) return aSameTonePriority - bSameTonePriority;
 
-  // 第三排序：同組優先（1/2 一組，3/4 一組）
-  const aGroupPriority = toneGroup(aTone) === preferredGroup ? 0 : 1;
-  const bGroupPriority = toneGroup(bTone) === preferredGroup ? 0 : 1;
-  if (aGroupPriority !== bGroupPriority) return aGroupPriority - bGroupPriority;
+      const aGroupPriority = toneGroup(aTone) === preferredGroup ? 0 : 1;
+      const bGroupPriority = toneGroup(bTone) === preferredGroup ? 0 : 1;
+      if (aGroupPriority !== bGroupPriority) return aGroupPriority - bGroupPriority;
 
-  // 第四排序：tone 數值
-  if (aTone !== bTone) return aTone - bTone;
+      if (aTone !== bTone) return aTone - bTone;
 
-  // 第五排序：term
-  const termCompare = String(a.term || '').localeCompare(String(b.term || ''), 'zh-Hant');
-  if (termCompare !== 0) return termCompare;
+      const termCompare = String(a.term || '').localeCompare(String(b.term || ''), 'zh-Hant');
+      if (termCompare !== 0) return termCompare;
 
-  // 第六排序：id
-  return Number(a.id) - Number(b.id);
-});
+      return Number(a.id) - Number(b.id);
+    });
 
     totalCount = sortedRows.length;
   }
@@ -161,9 +162,7 @@ sortedRows = (data || []).slice().sort((a, b) => {
     const nextRows = sortedRows.slice(currentOffset, currentOffset + PAGE_SIZE);
     appendResults(nextRows);
     currentOffset += nextRows.length;
-
-    const preferredGroup = preferredGroupFromTone(currentTone);
-    stats.textContent = `最後字：${currentLastChar}　韻母：${currentFinalVowel}　聲調：${toneLabel(currentTone)}　排序：權重高到低，${groupLabel(preferredGroup)}　目前顯示：${currentOffset} / ${totalCount}`;
+    updateStatsText();
 
     if (currentOffset >= totalCount) {
       finished = true;
@@ -174,13 +173,101 @@ sortedRows = (data || []).slice().sort((a, b) => {
     showLoading(false);
   }
 
+  function createWeightControls(row, itemRoot) {
+    const wrap = document.createElement('div');
+    wrap.className = 'weight-controls';
+
+    const downBtn = document.createElement('button');
+    downBtn.type = 'button';
+    downBtn.className = 'weight-btn';
+    downBtn.textContent = '−';
+    downBtn.title = '權重減 1';
+
+    const weightValue = document.createElement('span');
+    weightValue.className = 'weight-value';
+    weightValue.textContent = String(row.weight ?? 0);
+
+    const upBtn = document.createElement('button');
+    upBtn.type = 'button';
+    upBtn.className = 'weight-btn';
+    upBtn.textContent = '+';
+    upBtn.title = '權重加 1';
+
+    const disablePair = () => {
+      downBtn.disabled = true;
+      upBtn.disabled = true;
+      itemRoot.classList.add('weight-locked');
+    };
+
+    if (buttonDisabledForRow(row)) {
+      disablePair();
+    }
+
+    async function changeWeight(delta) {
+      if (downBtn.disabled || upBtn.disabled) return;
+
+      const currentWeight = Number.isFinite(Number(row.weight)) ? Number(row.weight) : 0;
+      const newWeight = currentWeight + delta;
+
+      if (newWeight < 0 || newWeight > 99) return;
+
+      downBtn.disabled = true;
+      upBtn.disabled = true;
+      itemRoot.classList.add('weight-working');
+      message.textContent = '';
+
+      const { error } = await supabase
+        .from(TABLE_NAME)
+        .update({ weight: newWeight })
+        .eq('id', row.id);
+
+      itemRoot.classList.remove('weight-working');
+
+      if (error) {
+        downBtn.disabled = false;
+        upBtn.disabled = false;
+        message.textContent = `權重更新失敗（id=${row.id}）：${error.message || error}`;
+        return;
+      }
+
+      row.weight = newWeight;
+      weightValue.textContent = String(newWeight);
+      const meta = itemRoot.querySelector('.meta');
+      if (meta) {
+        meta.textContent = `韻母 ${row.final_vowel}｜${toneLabel(row.tone)}｜權重 `;
+        meta.appendChild(wrap);
+      }
+      adjustedWeightIds.add(Number(row.id));
+      disablePair();
+    }
+
+    downBtn.addEventListener('click', () => changeWeight(-1));
+    upBtn.addEventListener('click', () => changeWeight(1));
+
+    if ((Number(row.weight) || 0) <= 0) {
+      downBtn.disabled = true;
+    }
+    if ((Number(row.weight) || 0) >= 99) {
+      upBtn.disabled = true;
+    }
+
+    wrap.appendChild(downBtn);
+    wrap.appendChild(weightValue);
+    wrap.appendChild(upBtn);
+    return wrap;
+  }
+
   function appendResults(rows) {
     const fragment = document.createDocumentFragment();
 
     rows.forEach((row) => {
       const node = template.content.cloneNode(true);
-      node.querySelector('.term').textContent = row.term;
-      node.querySelector('.meta').textContent = `韻母 ${row.final_vowel}｜${toneLabel(row.tone)}｜權重 ${row.weight ?? 0}`;
+      const item = node.querySelector('.result-item');
+      item.dataset.id = row.id;
+      item.querySelector('.term').textContent = row.term;
+      const meta = item.querySelector('.meta');
+      meta.textContent = `韻母 ${row.final_vowel}｜${toneLabel(row.tone)}｜權重 `;
+      meta.appendChild(createWeightControls(row, item));
       fragment.appendChild(node);
     });
 

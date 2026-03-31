@@ -129,9 +129,13 @@ button:disabled { opacity: 0.65; cursor: not-allowed; }
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 5px 2px;
+  padding: 4px 2px;
   margin: 0;
   border-bottom: 1px solid var(--line);
+}
+
+.result-item.weight-working {
+  opacity: 0.78;
 }
 
 .result-item .term {
@@ -149,6 +153,32 @@ button:disabled { opacity: 0.65; cursor: not-allowed; }
   line-height: 1.2;
   white-space: nowrap;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.weight-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.weight-btn {
+  min-width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.weight-value {
+  display: inline-block;
+  min-width: 20px;
+  text-align: center;
+  color: var(--text);
 }
 
 .loading, .end-message {
@@ -179,6 +209,10 @@ code {
 
   button {
     min-height: 42px;
+  }
+
+  .weight-btn {
+    min-height: 18px;
   }
 
   .result-item {
