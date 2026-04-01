@@ -11,18 +11,31 @@
 <body>
   <div class="container">
     <header class="hero">
-      <h1>P03 韻母查詢系統</h1>
-      <p>輸入一個詞，系統會取最後一個字，到資料表 <code>TblP03LexiconRhyme</code> 查詢其韻母，並列出同韻母詞彙。</p>
+      <div class="hero-top">
+        <div>
+          <h1>P03 韻母查詢系統</h1>
+          <p>輸入詞語後，系統會取最後一個字查找韻母，依權重、字數、聲調優先規則列出同韻詞，並可直接加入精選。</p>
+        </div>
+        <a class="page-link" href="featured.html">精選</a>
+      </div>
     </header>
 
     <section class="card search-card">
       <form id="searchForm" autocomplete="off">
         <label for="termInput">輸入詞語</label>
         <div class="search-row">
-          <input id="termInput" type="text" maxlength="20" placeholder="例如：安靜、伯牙、佈告" required />
+          <input id="termInput" type="text" maxlength="50" placeholder="例如：安靜、伯牙、佈告" required />
           <button type="submit" id="searchBtn">查詢</button>
         </div>
       </form>
+
+      <div class="random-bar">
+        <button type="button" class="random-btn" data-length="1">一字：載入中…</button>
+        <button type="button" class="random-btn" data-length="2">二字：載入中…</button>
+        <button type="button" class="random-btn" data-length="3">三字：載入中…</button>
+        <button type="button" class="random-btn" data-length="4">四字：載入中…</button>
+        <button type="button" id="refreshRandomBtn" class="ghost-btn">換一批</button>
+      </div>
 
       <div id="searchInfo" class="search-info"></div>
       <div id="message" class="message"></div>
@@ -44,7 +57,10 @@
   <template id="resultItemTemplate">
     <article class="result-item">
       <div class="term"></div>
-      <div class="meta"></div>
+      <div class="meta-row">
+        <div class="meta"></div>
+        <button type="button" class="select-btn">選</button>
+      </div>
     </article>
   </template>
 

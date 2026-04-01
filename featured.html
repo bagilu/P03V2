@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>P03 精選詞對</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header class="hero">
+      <div class="hero-top">
+        <div>
+          <h1>P03 精選詞對</h1>
+          <p>顯示已加入精選的詞對，依按讚數與建立時間排序。同一瀏覽器對同一筆資料只能按讚一次。</p>
+        </div>
+        <a class="page-link" href="index.html">回查詢</a>
+      </div>
+    </header>
+
+    <section class="card result-card">
+      <div class="result-head">
+        <h2>精選列表</h2>
+        <div id="featuredStats" class="stats"></div>
+      </div>
+      <div id="featuredMessage" class="message"></div>
+      <div id="featuredResults" class="results"></div>
+      <div id="featuredLoading" class="loading hidden">載入中…</div>
+    </section>
+  </div>
+
+  <template id="featuredItemTemplate">
+    <article class="result-item featured-item">
+      <div class="term pair-term"></div>
+      <div class="meta-row">
+        <div class="meta"></div>
+        <button type="button" class="like-btn">讚</button>
+      </div>
+    </article>
+  </template>
+
+  <script src="featured.js"></script>
+</body>
+</html>

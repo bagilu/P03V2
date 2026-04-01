@@ -7,6 +7,7 @@
   --accent: #2563eb;
   --warn: #b91c1c;
   --ok: #065f46;
+  --stripe: #f8fafc;
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
 }
 
@@ -19,12 +20,19 @@ body {
 }
 
 .container {
-  width: min(980px, calc(100vw - 32px));
+  width: min(1100px, calc(100vw - 32px));
   margin: 24px auto 44px;
 }
 
 .hero {
   margin-bottom: 14px;
+}
+
+.hero-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
 }
 
 .hero h1 {
@@ -37,6 +45,22 @@ body {
   color: var(--muted);
   line-height: 1.6;
 }
+
+.page-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 86px;
+  min-height: 40px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 700;
+  padding: 0 14px;
+}
+
+.page-link:hover { filter: brightness(0.96); }
 
 .card {
   background: var(--card);
@@ -78,7 +102,7 @@ button {
   border-radius: 10px;
   background: var(--accent);
   color: white;
-  font-size: 0.98rem;
+  font-size: 0.96rem;
   font-weight: 700;
   cursor: pointer;
 }
@@ -86,20 +110,33 @@ button {
 button:hover { filter: brightness(0.96); }
 button:disabled { opacity: 0.65; cursor: not-allowed; }
 
+.random-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.random-btn,
+.ghost-btn {
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 0.88rem;
+}
+
+.ghost-btn {
+  background: #475569;
+}
+
 .search-info, .message, .stats {
   margin-top: 10px;
   line-height: 1.5;
   font-size: 0.94rem;
 }
 
-.search-info {
-  color: var(--ok);
-}
-
-.message {
-  color: var(--warn);
-  min-height: 1.5em;
-}
+.search-info { color: var(--ok); }
+.message { color: var(--warn); min-height: 1.5em; }
 
 .result-head {
   display: flex;
@@ -125,25 +162,21 @@ button:disabled { opacity: 0.65; cursor: not-allowed; }
 }
 
 .result-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(120px, 200px) 1fr;
   gap: 12px;
-  padding: 4px 2px;
+  align-items: center;
+  padding: 5px 6px;
   margin: 0;
   border-bottom: 1px solid var(--line);
 }
 
-.result-item:nth-child(even) {
-  background-color: #f7f7f7;
-}
-
-.result-item:nth-child(odd) {
-  background-color: #ffffff;
+.results > .result-item:nth-child(even) {
+  background-color: var(--stripe);
 }
 
 .result-item:hover {
-  background: #f8fafc;
+  background: #eef4ff;
 }
 
 .result-item.weight-working {
@@ -159,15 +192,24 @@ button:disabled { opacity: 0.65; cursor: not-allowed; }
   text-overflow: ellipsis;
 }
 
+.meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
 .result-item .meta {
   color: var(--muted);
   font-size: 0.82rem;
   line-height: 1.2;
-  white-space: nowrap;
-  flex-shrink: 0;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-wrap: wrap;
 }
 
 .weight-controls {
@@ -176,14 +218,23 @@ button:disabled { opacity: 0.65; cursor: not-allowed; }
   gap: 3px;
 }
 
-.weight-btn {
+.weight-btn,
+.select-btn,
+.like-btn {
   min-width: 18px;
-  height: 18px;
-  padding: 0;
+  height: 20px;
+  padding: 0 6px;
   border-radius: 4px;
   font-size: 12px;
   line-height: 1;
   font-weight: 700;
+}
+
+.select-btn,
+.like-btn {
+  min-width: 34px;
+  background: #475569;
+  flex-shrink: 0;
 }
 
 .weight-value {
@@ -211,8 +262,17 @@ code {
 
 @media (max-width: 720px) {
   .container {
-    width: min(980px, calc(100vw - 18px));
+    width: min(1100px, calc(100vw - 18px));
     margin-top: 16px;
+  }
+
+  .hero-top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .page-link {
+    width: fit-content;
   }
 
   .search-row {
@@ -223,18 +283,23 @@ code {
     min-height: 42px;
   }
 
-  .weight-btn {
-    min-height: 18px;
+  .random-btn,
+  .ghost-btn {
+    min-height: 34px;
+  }
+
+  .weight-btn,
+  .select-btn,
+  .like-btn {
+    min-height: 20px;
   }
 
   .result-item {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 3px;
-    padding: 6px 2px;
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 
-  .result-item .meta {
-    white-space: normal;
+  .meta-row {
+    align-items: flex-start;
   }
 }

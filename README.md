@@ -1,51 +1,101 @@
-# P03 韻母查詢系統
+# P03 韻母查詢系統 v4
 
-這是一個可直接部署到 GitHub Pages 的靜態網站。
+這是一個可直接部署到 GitHub Pages 的靜態網站，配合 Supabase 使用。
 
 ## 功能
 
-- 輸入一個詞
-- 系統自動取最後一個字
-- 到 `TblP03LexiconRhyme.term` 查找該字
-- 若找不到，顯示：`系統沒有最後這個字-X`
-- 若找到，取出 `final_vowel` 與 `tone`
-- 顯示所有同 `final_vowel` 的詞
+### 主查詢頁
+- 輸入詞語後，系統會取最後一個字，到 `TblP03LexiconRhyme` 查詢其 `final_vowel` 與 `tone`
+- 顯示所有相同 `final_vowel` 的詞語
 - 排序規則：
-  1. 先依 `weight` 由大到小
-  2. 若權重相同，再依查詢字的聲調分群優先
-     - 查詢字是 1 或 2 聲：`1/2 聲` 優先
-     - 查詢字是 3 或 4 聲：`3/4 聲` 優先
-  3. 再依 `tone`、`term`、`id` 排序
-- 使用 Infinite Scroll 分批顯示結果
+  1. `weight` 由大到小
+  2. 與查詢詞同字數優先
+  3. 與查詢字同 `tone` 優先
+  4. 與查詢字同聲調組優先（1/2 一組、3/4 一組）
+  5. 再依 `tone`、`term`、`id`
+- 採用 Infinite Scroll 分批顯示
+- 每筆結果可用 `− / +` 微調 `weight`，每次只增減 1，成功後該列停用
+- 每筆結果右側有 `選` 按鈕，可將 `source_term + selected_term` 加入精選資料表
+- 查詢框下方有四個隨機按鈕，分別抽出 1、2、3、4 字詞
+- 提供 `換一批` 按鈕重新抽樣
+
+### 精選頁
+- 顯示 `TblP03FeaturedPairs` 內容
+- 排序規則：
+  1. `likes_count DESC`
+  2. `created_at DESC`
+- 每筆資料可按讚
+- 使用 `localStorage` 記錄，同一瀏覽器對同一筆資料只能按一次
 
 ## 檔案
-
-- `index.html`：主頁面
-- `style.css`：樣式
-- `app.js`：查詢、排序與無限捲動邏輯
+- `index.html`：主查詢頁
+- `featured.html`：精選頁
+- `app.js`：主查詢頁邏輯
+- `featured.js`：精選頁邏輯
+- `style.css`：共用樣式
 - `config.example.js`：Supabase 設定範本
 
 ## 使用方式
-
 1. 將 `config.example.js` 複製為 `config.js`
-2. 填入您的：
-   - Supabase Project URL
-   - Supabase anon key
-3. 上傳全部檔案到 GitHub repository
-4. 在 GitHub repository 的 **Settings → Pages** 啟用 GitHub Pages
-5. Source 選擇 `main` branch，資料夾選 `/root`
+2. 填入您的 Supabase Project URL 與 anon key
+3. 將檔案上傳到 GitHub repository
+4. 到 GitHub 的 `Settings → Pages` 啟用 GitHub Pages
 
-## Supabase 必要條件
+## Supabase 資料表
 
-前端查詢要成功，資料表需要允許匿名讀取。至少要有對 `TblP03LexiconRhyme` 的 `SELECT` policy。
+### 詞表
+- 表名：`TblP03LexiconRhyme`
+- 主要欄位：
+  - `id`
+  - `term`
+  - `final_vowel`
+  - `tone`
+  - `weight`
+  - `length`
+
+### 精選表
+- 表名：`TblP03FeaturedPairs`
+- 欄位：
+  - `id`
+  - `source_term`
+  - `selected_term`
+  - `created_at`
+  - `likes_count`
+
+## 建議 RLS / Policy
+
+若前端要直接查詢、更新與新增，至少需開放以下權限。
 
 ```sql
 alter table "TblP03LexiconRhyme" enable row level security;
+alter table "TblP03FeaturedPairs" enable row level security;
 
-create policy "Allow public read on TblP03LexiconRhyme"
+create policy "Allow public read lexicon"
 on "TblP03LexiconRhyme"
 for select
 using (true);
+
+create policy "Allow public update lexicon"
+on "TblP03LexiconRhyme"
+for update
+using (true)
+with check (true);
+
+create policy "Allow public read featured"
+on "TblP03FeaturedPairs"
+for select
+using (true);
+
+create policy "Allow public insert featured"
+on "TblP03FeaturedPairs"
+for insert
+with check (true);
+
+create policy "Allow public update featured"
+on "TblP03FeaturedPairs"
+for update
+using (true)
+with check (true);
 ```
 
 ## 建議索引
@@ -57,28 +107,15 @@ on "TblP03LexiconRhyme" (term);
 create index if not exists idx_tblp03lexiconrhyme_final_vowel
 on "TblP03LexiconRhyme" (final_vowel);
 
-create index if not exists idx_tblp03lexiconrhyme_final_vowel_weight
-on "TblP03LexiconRhyme" (final_vowel, weight desc);
+create index if not exists idx_tblp03lexiconrhyme_length
+on "TblP03LexiconRhyme" (length);
+
+create index if not exists idx_tblp03featuredpairs_likes_created
+on "TblP03FeaturedPairs" (likes_count desc, created_at desc);
 ```
 
-## 備註
-
-- 目前採用「最後一個字找到第一筆符合資料後，就取其 `final_vowel` 與 `tone`」的邏輯。
-- 若最後一個字本身是多音字，目前會優先採用 `weight` 較高的那一筆；若權重相同，採用 `id` 較小的一筆。
-- 若未來要精準處理多音字，可再改成：
-  - 顯示多個候選韻母供使用者選擇，或
-  - 依詞語整體建立更細的音韻資料表。
-
-
-## 權重調整功能
-
-新版已在每一列的權重旁加入小型 `− / +` 按鈕。
-
-- 左側 `−`：權重減 1
-- 右側 `+`：權重加 1
-- 每筆資料在單次查詢畫面中只能調整一次，成功後該列按鈕會停用
-- 變更會直接寫回 Supabase 資料表
-
-### 必要條件
-
-前端要能成功修改 `weight`，資料表必須允許 `UPDATE`。若啟用了 RLS，請另外建立對應的 update policy，否則畫面會顯示更新失敗。
+## 注意
+- 隨機按鈕目前會依 `length = 1/2/3/4` 各抽一筆
+- 若某個字數沒有資料，按鈕會顯示無資料
+- 精選加入前，前端會先查重；資料表也有 `UNIQUE (source_term, selected_term)` 約束
+- 按讚防重複目前是同一瀏覽器層級，不是帳號層級

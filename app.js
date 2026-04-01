@@ -1,32 +1,36 @@
 (function () {
   const { createClient } = window.supabase;
 
+  const TABLE_NAME = 'TblP03LexiconRhyme';
+  const FEATURED_TABLE = 'TblP03FeaturedPairs';
+  const PAGE_SIZE = 80;
+
+  const message = document.getElementById('message');
   if (!window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
-    document.getElementById('message').textContent = '尚未設定 config.js，請先填入 Supabase URL 與 anon key。';
+    message.textContent = '尚未設定 config.js，請先填入 Supabase URL 與 anon key。';
     return;
   }
 
   const supabase = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
-  const PAGE_SIZE = 80;
-  const TABLE_NAME = 'TblP03LexiconRhyme';
-
   const searchForm = document.getElementById('searchForm');
   const termInput = document.getElementById('termInput');
   const searchBtn = document.getElementById('searchBtn');
   const searchInfo = document.getElementById('searchInfo');
-  const message = document.getElementById('message');
   const stats = document.getElementById('stats');
   const results = document.getElementById('results');
   const loading = document.getElementById('loading');
   const endMessage = document.getElementById('endMessage');
   const sentinel = document.getElementById('sentinel');
   const template = document.getElementById('resultItemTemplate');
+  const randomButtons = Array.from(document.querySelectorAll('.random-btn'));
+  const refreshRandomBtn = document.getElementById('refreshRandomBtn');
 
   let currentFinalVowel = null;
   let currentLastChar = null;
   let currentTone = null;
   let currentInputLength = 0;
+  let currentQueryTerm = '';
   let currentOffset = 0;
   let finished = false;
   let loadingNow = false;
@@ -48,6 +52,9 @@
     currentOffset = 0;
     currentTone = null;
     currentInputLength = 0;
+    currentFinalVowel = null;
+    currentLastChar = null;
+    currentQueryTerm = '';
     totalCount = 0;
     sortedRows = [];
     adjustedWeightIds = new Set();
@@ -59,7 +66,7 @@
   }
 
   function normalizeInput(value) {
-    return value.trim();
+    return String(value || '').trim();
   }
 
   function getLastCharacter(text) {
@@ -68,7 +75,7 @@
   }
 
   function getTextLength(text) {
-    return Array.from(text || '').length;
+    return Array.from(String(text || '')).length;
   }
 
   function toneGroup(tone) {
@@ -99,7 +106,7 @@
   }
 
   function updateStatsText() {
-    stats.textContent = `最後字：${currentLastChar}　韻母：${currentFinalVowel}　聲調：${toneLabel(currentTone)}　字數：${currentInputLength}　排序：先依權重，再同字數優先，再同聲優先，再同組優先　目前顯示：${currentOffset} / ${totalCount}`;
+    stats.textContent = `查詢詞：${currentQueryTerm}　最後字：${currentLastChar}　韻母：${currentFinalVowel}　聲調：${toneLabel(currentTone)}　字數：${currentInputLength}　排序：先依權重，再同字數優先，再同聲優先，再同組優先　目前顯示：${currentOffset} / ${totalCount}`;
   }
 
   async function lookupLastCharacterInfo(lastChar) {
@@ -139,7 +146,6 @@
       const queryLength = Number.isFinite(Number(currentInputLength)) ? Number(currentInputLength) : 0;
       const aLength = Number.isFinite(Number(a.length)) ? Number(a.length) : 0;
       const bLength = Number.isFinite(Number(b.length)) ? Number(b.length) : 0;
-
       const aSameLengthPriority = aLength === queryLength ? 0 : 1;
       const bSameLengthPriority = bLength === queryLength ? 0 : 1;
       if (aSameLengthPriority !== bSameLengthPriority) return aSameLengthPriority - bSameLengthPriority;
@@ -147,7 +153,6 @@
       const queryTone = Number.isFinite(Number(currentTone)) ? Number(currentTone) : 99;
       const aTone = Number.isFinite(Number(a.tone)) ? Number(a.tone) : 99;
       const bTone = Number.isFinite(Number(b.tone)) ? Number(b.tone) : 99;
-
       const aSameTonePriority = aTone === queryTone ? 0 : 1;
       const bSameTonePriority = bTone === queryTone ? 0 : 1;
       if (aSameTonePriority !== bSameTonePriority) return aSameTonePriority - bSameTonePriority;
@@ -187,7 +192,7 @@
     showLoading(false);
   }
 
-  function createWeightControls(row, itemRoot) {
+  function createWeightControls(row, itemRoot, meta) {
     const wrap = document.createElement('div');
     wrap.className = 'weight-controls';
 
@@ -222,7 +227,6 @@
 
       const currentWeight = Number.isFinite(Number(row.weight)) ? Number(row.weight) : 0;
       const newWeight = currentWeight + delta;
-
       if (newWeight < 0 || newWeight > 99) return;
 
       downBtn.disabled = true;
@@ -246,13 +250,8 @@
 
       row.weight = newWeight;
       weightValue.textContent = String(newWeight);
-
-      const meta = itemRoot.querySelector('.meta');
-      if (meta) {
-        meta.textContent = `韻母 ${row.final_vowel}｜${toneLabel(row.tone)}｜字數 ${row.length ?? ''}｜權重 `;
-        meta.appendChild(wrap);
-      }
-
+      meta.textContent = `韻母 ${row.final_vowel}｜${toneLabel(row.tone)}｜字數 ${row.length ?? ''}｜權重 `;
+      meta.appendChild(wrap);
       adjustedWeightIds.add(Number(row.id));
       disablePair();
     }
@@ -260,17 +259,65 @@
     downBtn.addEventListener('click', () => changeWeight(-1));
     upBtn.addEventListener('click', () => changeWeight(1));
 
-    if ((Number(row.weight) || 0) <= 0) {
-      downBtn.disabled = true;
-    }
-    if ((Number(row.weight) || 0) >= 99) {
-      upBtn.disabled = true;
-    }
+    if ((Number(row.weight) || 0) <= 0) downBtn.disabled = true;
+    if ((Number(row.weight) || 0) >= 99) upBtn.disabled = true;
 
     wrap.appendChild(downBtn);
     wrap.appendChild(weightValue);
     wrap.appendChild(upBtn);
     return wrap;
+  }
+
+  async function addFeaturedPair(row, selectBtn) {
+    if (!currentQueryTerm) {
+      message.textContent = '目前沒有有效的查詢詞，無法加入精選。';
+      return;
+    }
+
+    const sourceTerm = currentQueryTerm;
+    const selectedTerm = String(row.term || '');
+    if (!selectedTerm) return;
+
+    selectBtn.disabled = true;
+    message.textContent = '';
+
+    const { data: existing, error: checkError } = await supabase
+      .from(FEATURED_TABLE)
+      .select('id')
+      .eq('source_term', sourceTerm)
+      .eq('selected_term', selectedTerm)
+      .limit(1);
+
+    if (checkError) {
+      selectBtn.disabled = false;
+      message.textContent = `精選查重失敗：${checkError.message || checkError}`;
+      return;
+    }
+
+    if (existing && existing.length) {
+      message.textContent = `這組精選已存在：${sourceTerm}，${selectedTerm}`;
+      return;
+    }
+
+    const { error: insertError } = await supabase
+      .from(FEATURED_TABLE)
+      .insert({
+        source_term: sourceTerm,
+        selected_term: selectedTerm
+      });
+
+    if (insertError) {
+      selectBtn.disabled = false;
+      if (String(insertError.message || '').toLowerCase().includes('duplicate')) {
+        message.textContent = `這組精選已存在：${sourceTerm}，${selectedTerm}`;
+      } else {
+        message.textContent = `加入精選失敗：${insertError.message || insertError}`;
+      }
+      return;
+    }
+
+    selectBtn.textContent = '已選';
+    message.textContent = `已加入精選：${sourceTerm}，${selectedTerm}`;
   }
 
   function appendResults(rows) {
@@ -279,13 +326,17 @@
     rows.forEach((row) => {
       const node = template.content.cloneNode(true);
       const item = node.querySelector('.result-item');
+      const termEl = node.querySelector('.term');
+      const meta = node.querySelector('.meta');
+      const selectBtn = node.querySelector('.select-btn');
+
       item.dataset.id = row.id;
-      item.querySelector('.term').textContent = row.term;
+      termEl.textContent = row.term;
 
-      const meta = item.querySelector('.meta');
       meta.textContent = `韻母 ${row.final_vowel}｜${toneLabel(row.tone)}｜字數 ${row.length ?? ''}｜權重 `;
-      meta.appendChild(createWeightControls(row, item));
+      meta.appendChild(createWeightControls(row, item, meta));
 
+      selectBtn.addEventListener('click', () => addFeaturedPair(row, selectBtn));
       fragment.appendChild(node);
     });
 
@@ -309,8 +360,8 @@
     observer.observe(sentinel);
   }
 
-  async function startSearch() {
-    const raw = normalizeInput(termInput.value);
+  async function startSearch(explicitTerm) {
+    const raw = normalizeInput(explicitTerm ?? termInput.value);
     resetUI();
 
     if (!raw) {
@@ -318,6 +369,8 @@
       return;
     }
 
+    termInput.value = raw;
+    currentQueryTerm = raw;
     currentInputLength = getTextLength(raw);
     currentLastChar = getLastCharacter(raw);
     searchInfo.textContent = `輸入詞語：${raw}　→　系統取最後一個字：${currentLastChar}　→　輸入字數：${currentInputLength}`;
@@ -360,10 +413,71 @@
     }
   }
 
+  async function getRandomTermByLength(len) {
+    const { count, error: countError } = await supabase
+      .from(TABLE_NAME)
+      .select('id', { count: 'exact', head: true })
+      .eq('length', len);
+
+    if (countError) throw countError;
+    if (!count) return '';
+
+    const offset = Math.floor(Math.random() * count);
+    const { data, error } = await supabase
+      .from(TABLE_NAME)
+      .select('term')
+      .eq('length', len)
+      .range(offset, offset);
+
+    if (error) throw error;
+    return data && data.length ? String(data[0].term || '') : '';
+  }
+
+  async function loadRandomButtons() {
+    refreshRandomBtn.disabled = true;
+    for (const btn of randomButtons) {
+      btn.disabled = true;
+      const len = Number(btn.dataset.length);
+      btn.textContent = `${len}字：載入中…`;
+    }
+
+    try {
+      for (const btn of randomButtons) {
+        const len = Number(btn.dataset.length);
+        const term = await getRandomTermByLength(len);
+        btn.dataset.term = term;
+        btn.textContent = term ? `${len}字：${term}` : `${len}字：無資料`;
+        btn.disabled = !term;
+      }
+    } catch (err) {
+      console.error(err);
+      message.textContent = `隨機按鈕載入失敗：${err.message || err}`;
+      for (const btn of randomButtons) {
+        const len = Number(btn.dataset.length);
+        btn.textContent = `${len}字：載入失敗`;
+      }
+    } finally {
+      refreshRandomBtn.disabled = false;
+    }
+  }
+
   searchForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     await startSearch();
   });
 
+  randomButtons.forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const term = normalizeInput(btn.dataset.term || '');
+      if (!term) return;
+      await startSearch(term);
+    });
+  });
+
+  refreshRandomBtn.addEventListener('click', async () => {
+    await loadRandomButtons();
+  });
+
   setupInfiniteScroll();
+  loadRandomButtons();
 })();
