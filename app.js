@@ -39,6 +39,7 @@
   let searchToken = 0;
   let sortedRows = [];
   let adjustedWeightIds = new Set();
+  let openEditorId = null;
 
   function resetUI() {
     searchInfo.textContent = '';
@@ -58,6 +59,7 @@
     totalCount = 0;
     sortedRows = [];
     adjustedWeightIds = new Set();
+    openEditorId = null;
   }
 
   function showLoading(show, text = '載入中…') {
@@ -268,16 +270,35 @@
     return wrap;
   }
 
-  async function addFeaturedPair(row, selectBtn) {
+  function closeAllEditors() {
+    document.querySelectorAll('.featured-editor').forEach((el) => {
+      el.classList.add('hidden');
+      el.innerHTML = '';
+    });
+    document.querySelectorAll('.select-btn').forEach((btn) => {
+      if (btn.textContent !== '已選') btn.textContent = '選';
+    });
+    openEditorId = null;
+  }
+
+  async function saveFeaturedPair({ row, selectBtn, editorWrap, prefixOneInput, prefixTwoInput, saveBtn, cancelBtn }) {
     if (!currentQueryTerm) {
       message.textContent = '目前沒有有效的查詢詞，無法加入精選。';
       return;
     }
 
-    const sourceTerm = currentQueryTerm;
-    const selectedTerm = String(row.term || '');
-    if (!selectedTerm) return;
+    const prefixOne = normalizeInput(prefixOneInput.value);
+    const prefixTwo = normalizeInput(prefixTwoInput.value);
+    const sourceTerm = `${prefixOne}${currentQueryTerm}`;
+    const selectedTerm = `${prefixTwo}${String(row.term || '')}`;
 
+    if (!sourceTerm || !selectedTerm) {
+      message.textContent = '精選內容不可為空。';
+      return;
+    }
+
+    saveBtn.disabled = true;
+    cancelBtn.disabled = true;
     selectBtn.disabled = true;
     message.textContent = '';
 
@@ -289,6 +310,8 @@
       .limit(1);
 
     if (checkError) {
+      saveBtn.disabled = false;
+      cancelBtn.disabled = false;
       selectBtn.disabled = false;
       message.textContent = `精選查重失敗：${checkError.message || checkError}`;
       return;
@@ -296,6 +319,9 @@
 
     if (existing && existing.length) {
       message.textContent = `這組精選已存在：${sourceTerm}，${selectedTerm}`;
+      saveBtn.disabled = false;
+      cancelBtn.disabled = false;
+      selectBtn.disabled = false;
       return;
     }
 
@@ -307,6 +333,8 @@
       });
 
     if (insertError) {
+      saveBtn.disabled = false;
+      cancelBtn.disabled = false;
       selectBtn.disabled = false;
       if (String(insertError.message || '').toLowerCase().includes('duplicate')) {
         message.textContent = `這組精選已存在：${sourceTerm}，${selectedTerm}`;
@@ -316,8 +344,120 @@
       return;
     }
 
-    selectBtn.textContent = '已選';
     message.textContent = `已加入精選：${sourceTerm}，${selectedTerm}`;
+    selectBtn.textContent = '已選';
+    editorWrap.classList.add('hidden');
+    editorWrap.innerHTML = '';
+    openEditorId = null;
+  }
+
+  function buildEditor(row, item, selectBtn) {
+    const editorWrap = item.querySelector('.featured-editor');
+    editorWrap.innerHTML = '';
+    editorWrap.classList.remove('hidden');
+
+    const editorInner = document.createElement('div');
+    editorInner.className = 'featured-editor-inner';
+
+    const prefixOneInput = document.createElement('input');
+    prefixOneInput.type = 'text';
+    prefixOneInput.maxLength = 30;
+    prefixOneInput.placeholder = '前綴';
+    prefixOneInput.className = 'prefix-input';
+
+    const queryToken = document.createElement('span');
+    queryToken.className = 'editor-fixed-term';
+    queryToken.textContent = currentQueryTerm;
+
+    const comma = document.createElement('span');
+    comma.className = 'editor-comma';
+    comma.textContent = '，';
+
+    const prefixTwoInput = document.createElement('input');
+    prefixTwoInput.type = 'text';
+    prefixTwoInput.maxLength = 30;
+    prefixTwoInput.placeholder = '前綴';
+    prefixTwoInput.className = 'prefix-input';
+
+    const selectedToken = document.createElement('span');
+    selectedToken.className = 'editor-fixed-term';
+    selectedToken.textContent = String(row.term || '');
+
+    const preview = document.createElement('div');
+    preview.className = 'editor-preview';
+
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'save-featured-btn';
+    saveBtn.textContent = '存入精選';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'cancel-featured-btn';
+    cancelBtn.textContent = '取消';
+
+    function refreshPreview() {
+      const sourceTerm = `${normalizeInput(prefixOneInput.value)}${currentQueryTerm}`;
+      const selectedTerm = `${normalizeInput(prefixTwoInput.value)}${String(row.term || '')}`;
+      preview.textContent = `將存入：${sourceTerm}，${selectedTerm}`;
+    }
+
+    prefixOneInput.addEventListener('input', refreshPreview);
+    prefixTwoInput.addEventListener('input', refreshPreview);
+
+    saveBtn.addEventListener('click', () => saveFeaturedPair({
+      row,
+      selectBtn,
+      editorWrap,
+      prefixOneInput,
+      prefixTwoInput,
+      saveBtn,
+      cancelBtn
+    }));
+
+    cancelBtn.addEventListener('click', () => {
+      editorWrap.classList.add('hidden');
+      editorWrap.innerHTML = '';
+      if (selectBtn.textContent !== '已選') selectBtn.textContent = '選';
+      openEditorId = null;
+    });
+
+    editorInner.appendChild(prefixOneInput);
+    editorInner.appendChild(queryToken);
+    editorInner.appendChild(comma);
+    editorInner.appendChild(prefixTwoInput);
+    editorInner.appendChild(selectedToken);
+    editorInner.appendChild(saveBtn);
+    editorInner.appendChild(cancelBtn);
+    editorInner.appendChild(preview);
+
+    editorWrap.appendChild(editorInner);
+    refreshPreview();
+    prefixOneInput.focus();
+  }
+
+  function toggleFeaturedEditor(row, item, selectBtn) {
+    if (!currentQueryTerm) {
+      message.textContent = '目前沒有有效的查詢詞，無法加入精選。';
+      return;
+    }
+
+    const rowId = Number(row.id);
+    const editorWrap = item.querySelector('.featured-editor');
+    const alreadyOpen = !editorWrap.classList.contains('hidden') && openEditorId === rowId;
+
+    if (alreadyOpen) {
+      editorWrap.classList.add('hidden');
+      editorWrap.innerHTML = '';
+      if (selectBtn.textContent !== '已選') selectBtn.textContent = '選';
+      openEditorId = null;
+      return;
+    }
+
+    closeAllEditors();
+    selectBtn.textContent = '收';
+    openEditorId = rowId;
+    buildEditor(row, item, selectBtn);
   }
 
   function appendResults(rows) {
@@ -336,7 +476,7 @@
       meta.textContent = `韻母 ${row.final_vowel}｜${toneLabel(row.tone)}｜字數 ${row.length ?? ''}｜權重 `;
       meta.appendChild(createWeightControls(row, item, meta));
 
-      selectBtn.addEventListener('click', () => addFeaturedPair(row, selectBtn));
+      selectBtn.addEventListener('click', () => toggleFeaturedEditor(row, item, selectBtn));
       fragment.appendChild(node);
     });
 
