@@ -111,10 +111,23 @@
     stats.textContent = `查詢詞：${currentQueryTerm}　最後字：${currentLastChar}　韻母：${currentFinalVowel}　聲調：${toneLabel(currentTone)}　字數：${currentInputLength}　排序：先依權重，再同字數優先，再同聲優先，再同組優先　目前顯示：${currentOffset} / ${totalCount}`;
   }
 
+  async function lookupExactTermInfo(term) {
+    const { data, error } = await supabase
+      .from(TABLE_NAME)
+      .select('final_vowel, tone, weight, id, term')
+      .eq('term', term)
+      .order('weight', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: true })
+      .limit(1);
+
+    if (error) throw error;
+    return data && data.length ? data[0] : null;
+  }
+
   async function lookupLastCharacterInfo(lastChar) {
     const { data, error } = await supabase
       .from(TABLE_NAME)
-      .select('final_vowel, tone, weight, id')
+      .select('final_vowel, tone, weight, id, term')
       .eq('term', lastChar)
       .order('weight', { ascending: false, nullsFirst: false })
       .order('id', { ascending: true })
@@ -472,9 +485,22 @@
 
       item.dataset.id = row.id;
       termEl.textContent = row.term;
+      termEl.title = `點選重新查詢：${row.term}`;
+      termEl.classList.add('term-link');
+      termEl.tabIndex = 0;
 
       meta.textContent = `韻母 ${row.final_vowel}｜${toneLabel(row.tone)}｜字數 ${row.length ?? ''}｜權重 `;
       meta.appendChild(createWeightControls(row, item, meta));
+
+      termEl.addEventListener('click', async () => {
+        await startSearch(row.term);
+      });
+      termEl.addEventListener('keydown', async (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          await startSearch(row.term);
+        }
+      });
 
       selectBtn.addEventListener('click', () => toggleFeaturedEditor(row, item, selectBtn));
       fragment.appendChild(node);
@@ -513,25 +539,36 @@
     currentQueryTerm = raw;
     currentInputLength = getTextLength(raw);
     currentLastChar = getLastCharacter(raw);
-    searchInfo.textContent = `輸入詞語：${raw}　→　系統取最後一個字：${currentLastChar}　→　輸入字數：${currentInputLength}`;
 
     searchBtn.disabled = true;
     const myToken = ++searchToken;
 
     try {
-      const info = await lookupLastCharacterInfo(currentLastChar);
+      const exactInfo = await lookupExactTermInfo(raw);
       if (myToken !== searchToken) return;
 
-      if (!info) {
-        currentFinalVowel = null;
-        currentTone = null;
-        finished = true;
-        message.textContent = `系統沒有最後這個字-${currentLastChar}`;
-        return;
+      if (exactInfo) {
+        currentFinalVowel = exactInfo.final_vowel;
+        currentTone = exactInfo.tone;
+        searchInfo.textContent = `輸入詞語：${raw}　→　系統直接找到整詞資料　→　韻母：${currentFinalVowel}　→　輸入字數：${currentInputLength}`;
+      } else {
+        searchInfo.textContent = `輸入詞語：${raw}　→　系統未找到整詞資料，改取最後一個字：${currentLastChar}　→　輸入字數：${currentInputLength}`;
+
+        const fallbackInfo = await lookupLastCharacterInfo(currentLastChar);
+        if (myToken !== searchToken) return;
+
+        if (!fallbackInfo) {
+          currentFinalVowel = null;
+          currentTone = null;
+          finished = true;
+          message.textContent = `系統沒有最後這個字-${currentLastChar}`;
+          return;
+        }
+
+        currentFinalVowel = fallbackInfo.final_vowel;
+        currentTone = fallbackInfo.tone;
       }
 
-      currentFinalVowel = info.final_vowel;
-      currentTone = info.tone;
       message.textContent = '';
 
       await fetchAndSortSameFinalVowel(myToken);
@@ -539,7 +576,7 @@
 
       if (!sortedRows.length) {
         finished = true;
-        message.textContent = `找到了最後字 ${currentLastChar}，但沒有可顯示的同韻資料。`;
+        message.textContent = `找到了對應韻母，但沒有可顯示的同韻資料。`;
         return;
       }
 

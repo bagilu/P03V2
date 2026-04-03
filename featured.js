@@ -1,7 +1,7 @@
 (function () {
   const { createClient } = window.supabase;
   const FEATURED_TABLE = 'TblP03FeaturedPairs';
-  const STORAGE_KEY = 'p03_featured_liked_ids';
+  const STORAGE_KEY = 'p03_featured_liked_daily';
 
   const message = document.getElementById('featuredMessage');
   if (!window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
@@ -21,22 +21,34 @@
     loading.classList.toggle('hidden', !show);
   }
 
-  function getLikedIds() {
+  function getTodayString() {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  function getLikedMap() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      const arr = raw ? JSON.parse(raw) : [];
-      return new Set(Array.isArray(arr) ? arr.map(Number) : []);
+      const obj = raw ? JSON.parse(raw) : {};
+      return obj && typeof obj === 'object' ? obj : {};
     } catch {
-      return new Set();
+      return {};
     }
   }
 
-  function saveLikedIds(set) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(set)));
+  function saveLikedMap(map) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
   }
 
-  async function likeRow(row, btn, likesEl, likedIds) {
-    if (likedIds.has(Number(row.id))) return;
+  function likedToday(rowId, likedMap) {
+    return likedMap[String(rowId)] === getTodayString();
+  }
+
+  async function likeRow(row, btn, likesEl, likedMap) {
+    if (likedToday(row.id, likedMap)) return;
 
     btn.disabled = true;
     message.textContent = '';
@@ -55,13 +67,13 @@
 
     row.likes_count = newLikes;
     likesEl.textContent = `按讚數 ${row.likes_count}｜建立時間 ${new Date(row.created_at).toLocaleString('zh-TW')}`;
-    likedIds.add(Number(row.id));
-    saveLikedIds(likedIds);
-    btn.textContent = '已讚';
+    likedMap[String(row.id)] = getTodayString();
+    saveLikedMap(likedMap);
+    btn.textContent = '今日已讚';
   }
 
   function renderRows(rows) {
-    const likedIds = getLikedIds();
+    const likedMap = getLikedMap();
     const fragment = document.createDocumentFragment();
 
     rows.forEach((row) => {
@@ -75,12 +87,12 @@
       termEl.textContent = `${row.source_term}，${row.selected_term}`;
       metaEl.textContent = `按讚數 ${row.likes_count}｜建立時間 ${new Date(row.created_at).toLocaleString('zh-TW')}`;
 
-      if (likedIds.has(Number(row.id))) {
+      if (likedToday(row.id, likedMap)) {
         likeBtn.disabled = true;
-        likeBtn.textContent = '已讚';
+        likeBtn.textContent = '今日已讚';
       }
 
-      likeBtn.addEventListener('click', () => likeRow(row, likeBtn, metaEl, likedIds));
+      likeBtn.addEventListener('click', () => likeRow(row, likeBtn, metaEl, likedMap));
       fragment.appendChild(node);
     });
 

@@ -362,3 +362,15 @@ code {
     align-items: flex-start;
   }
 }
+
+
+.term-link {
+  cursor: pointer;
+}
+
+.term-link:hover,
+.term-link:focus {
+  color: var(--accent);
+  text-decoration: underline;
+  outline: none;
+}
