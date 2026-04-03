@@ -72,6 +72,25 @@
     btn.textContent = '今日已讚';
   }
 
+  function setExpandableState(termEl, expandBtn) {
+    const isTruncated = termEl.scrollWidth > termEl.clientWidth + 1;
+    expandBtn.classList.toggle('hidden', !isTruncated);
+    termEl.classList.toggle('expandable', isTruncated);
+    if (!isTruncated) {
+      termEl.classList.remove('expanded');
+      expandBtn.classList.remove('expanded');
+      expandBtn.textContent = '▼';
+    }
+  }
+
+  function toggleExpand(termEl, expandBtn) {
+    if (expandBtn.classList.contains('hidden')) return;
+    const willExpand = !termEl.classList.contains('expanded');
+    termEl.classList.toggle('expanded', willExpand);
+    expandBtn.classList.toggle('expanded', willExpand);
+    expandBtn.textContent = willExpand ? '▲' : '▼';
+  }
+
   function renderRows(rows) {
     const likedMap = getLikedMap();
     const fragment = document.createDocumentFragment();
@@ -79,12 +98,15 @@
     rows.forEach((row) => {
       const node = template.content.cloneNode(true);
       const item = node.querySelector('.result-item');
-      const termEl = node.querySelector('.term');
+      const termEl = node.querySelector('.pair-term');
+      const expandBtn = node.querySelector('.expand-btn');
       const metaEl = node.querySelector('.meta');
       const likeBtn = node.querySelector('.like-btn');
+      const fullText = `${row.source_term}，${row.selected_term}`;
 
       item.dataset.id = row.id;
-      termEl.textContent = `${row.source_term}，${row.selected_term}`;
+      termEl.textContent = fullText;
+      termEl.title = fullText;
       metaEl.textContent = `按讚數 ${row.likes_count}｜建立時間 ${new Date(row.created_at).toLocaleString('zh-TW')}`;
 
       if (likedToday(row.id, likedMap)) {
@@ -93,11 +115,27 @@
       }
 
       likeBtn.addEventListener('click', () => likeRow(row, likeBtn, metaEl, likedMap));
+      termEl.addEventListener('click', () => toggleExpand(termEl, expandBtn));
+      expandBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        toggleExpand(termEl, expandBtn);
+      });
+
       fragment.appendChild(node);
+
+      requestAnimationFrame(() => {
+        setExpandableState(termEl, expandBtn);
+      });
     });
 
     results.innerHTML = '';
     results.appendChild(fragment);
+    requestAnimationFrame(() => {
+      results.querySelectorAll('.pair-term').forEach((termEl) => {
+        const expandBtn = termEl.closest('.featured-main')?.querySelector('.expand-btn');
+        if (expandBtn) setExpandableState(termEl, expandBtn);
+      });
+    });
   }
 
   async function loadFeatured() {
@@ -131,6 +169,15 @@
       showLoading(false);
     }
   }
+
+  window.addEventListener('resize', () => {
+    results.querySelectorAll('.pair-term').forEach((termEl) => {
+      const expandBtn = termEl.closest('.featured-main')?.querySelector('.expand-btn');
+      if (expandBtn && !termEl.classList.contains('expanded')) {
+        setExpandableState(termEl, expandBtn);
+      }
+    });
+  });
 
   loadFeatured();
 })();

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>P03 精選詞對</title>
+  <title>P03行銷順口溜協作系統｜精選</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
@@ -13,8 +13,9 @@
     <header class="hero">
       <div class="hero-top">
         <div>
-          <h1>P03 精選詞對</h1>
-          <p>顯示已加入精選的詞對，依按讚數與建立時間排序。同一瀏覽器對同一筆資料每天只能按讚一次。</p>
+          <h1>P03行銷順口溜協作系統</h1>
+          <div class="subtitle">慈濟大學經營管理學系學生專題</div>
+          <p>顯示已加入精選的詞對，依按讚數與建立時間排序。同一瀏覽器對同一筆資料每天只能按讚一次。字句過長時，可點擊展開全文。</p>
         </div>
         <a class="page-link" href="index.html">回查詢</a>
       </div>
@@ -33,7 +34,10 @@
 
   <template id="featuredItemTemplate">
     <article class="result-item featured-item">
-      <div class="term pair-term"></div>
+      <div class="featured-main">
+        <button type="button" class="term pair-term" title="點擊展開或收合全文"></button>
+        <button type="button" class="expand-btn hidden" aria-label="展開全文">▼</button>
+      </div>
       <div class="meta-row">
         <div class="meta"></div>
         <button type="button" class="like-btn">讚</button>

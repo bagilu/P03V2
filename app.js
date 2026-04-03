@@ -25,6 +25,7 @@
   const template = document.getElementById('resultItemTemplate');
   const randomButtons = Array.from(document.querySelectorAll('.random-btn'));
   const refreshRandomBtn = document.getElementById('refreshRandomBtn');
+  const pronunciationPicker = document.getElementById('pronunciationPicker');
 
   let currentFinalVowel = null;
   let currentLastChar = null;
@@ -48,6 +49,8 @@
     results.innerHTML = '';
     endMessage.classList.add('hidden');
     loading.classList.add('hidden');
+    pronunciationPicker.classList.add('hidden');
+    pronunciationPicker.innerHTML = '';
     finished = false;
     loadingNow = false;
     currentOffset = 0;
@@ -92,15 +95,14 @@
   }
 
   function toneLabel(tone) {
-    const map = {
-      0: '輕聲',
-      1: '1聲',
-      2: '2聲',
-      3: '3聲',
-      4: '4聲',
-      5: '輕聲'
-    };
+    const map = { 0: '輕聲', 1: '1聲', 2: '2聲', 3: '3聲', 4: '4聲', 5: '輕聲' };
     return map[tone] || '未標示';
+  }
+
+  function readablePronunciation(row) {
+    const bopomofo = normalizeInput(row?.bopomofo);
+    if (bopomofo) return bopomofo;
+    return `${row?.final_vowel || ''} ${toneLabel(row?.tone)}`.trim();
   }
 
   function buttonDisabledForRow(row) {
@@ -114,7 +116,7 @@
   async function lookupExactTermInfo(term) {
     const { data, error } = await supabase
       .from(TABLE_NAME)
-      .select('final_vowel, tone, weight, id, term')
+      .select('id, term, final_vowel, tone, weight, bopomofo')
       .eq('term', term)
       .order('weight', { ascending: false, nullsFirst: false })
       .order('id', { ascending: true })
@@ -124,17 +126,82 @@
     return data && data.length ? data[0] : null;
   }
 
-  async function lookupLastCharacterInfo(lastChar) {
+  async function lookupLastCharacterInfos(lastChar) {
     const { data, error } = await supabase
       .from(TABLE_NAME)
-      .select('final_vowel, tone, weight, id, term')
+      .select('id, term, final_vowel, tone, weight, bopomofo')
       .eq('term', lastChar)
       .order('weight', { ascending: false, nullsFirst: false })
-      .order('id', { ascending: true })
-      .limit(1);
+      .order('tone', { ascending: true, nullsFirst: false })
+      .order('id', { ascending: true });
 
     if (error) throw error;
-    return data && data.length ? data[0] : null;
+    return data || [];
+  }
+
+  function dedupePronunciations(rows) {
+    const seen = new Set();
+    const unique = [];
+    rows.forEach((row) => {
+      const key = `${row.final_vowel || ''}|${row.tone || ''}|${normalizeInput(row.bopomofo)}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(row);
+      }
+    });
+    return unique;
+  }
+
+  function applyPronunciationInfo(row, contextText) {
+    currentFinalVowel = row.final_vowel;
+    currentTone = row.tone;
+    searchInfo.textContent = `${contextText}　→　使用發音：${readablePronunciation(row)}　→　韻母：${currentFinalVowel}　→　輸入字數：${currentInputLength}`;
+  }
+
+  function showPronunciationChoices(rows, token, contextText) {
+    pronunciationPicker.innerHTML = '';
+    pronunciationPicker.classList.remove('hidden');
+
+    const intro = document.createElement('div');
+    intro.className = 'pronunciation-intro';
+    intro.textContent = `${contextText}　→　此字有多個可能讀音，請選擇：`;
+    pronunciationPicker.appendChild(intro);
+
+    const list = document.createElement('div');
+    list.className = 'pronunciation-options';
+
+    rows.forEach((row) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'pronunciation-btn';
+      btn.textContent = readablePronunciation(row);
+      btn.addEventListener('click', async () => {
+        if (token !== searchToken) return;
+        pronunciationPicker.classList.add('hidden');
+        pronunciationPicker.innerHTML = '';
+        applyPronunciationInfo(row, contextText);
+        message.textContent = '';
+        try {
+          await fetchAndSortSameFinalVowel(token);
+          if (token !== searchToken) return;
+          if (!sortedRows.length) {
+            finished = true;
+            message.textContent = '找到了對應韻母，但沒有可顯示的同韻資料。';
+            return;
+          }
+          appendNextPage();
+        } catch (err) {
+          console.error(err);
+          message.textContent = `查詢失敗：${err.message || err}`;
+        } finally {
+          searchBtn.disabled = false;
+          showLoading(false);
+        }
+      });
+      list.appendChild(btn);
+    });
+
+    pronunciationPicker.appendChild(list);
   }
 
   async function fetchAndSortSameFinalVowel(token) {
@@ -233,9 +300,7 @@
       itemRoot.classList.add('weight-locked');
     };
 
-    if (buttonDisabledForRow(row)) {
-      disablePair();
-    }
+    if (buttonDisabledForRow(row)) disablePair();
 
     async function changeWeight(delta) {
       if (downBtn.disabled || upBtn.disabled) return;
@@ -340,10 +405,7 @@
 
     const { error: insertError } = await supabase
       .from(FEATURED_TABLE)
-      .insert({
-        source_term: sourceTerm,
-        selected_term: selectedTerm
-      });
+      .insert({ source_term: sourceTerm, selected_term: selectedTerm });
 
     if (insertError) {
       saveBtn.disabled = false;
@@ -514,9 +576,7 @@
 
     observer = new IntersectionObserver((entries) => {
       const first = entries[0];
-      if (first && first.isIntersecting) {
-        appendNextPage();
-      }
+      if (first && first.isIntersecting) appendNextPage();
     }, {
       root: null,
       rootMargin: '300px 0px',
@@ -548,35 +608,38 @@
       if (myToken !== searchToken) return;
 
       if (exactInfo) {
-        currentFinalVowel = exactInfo.final_vowel;
-        currentTone = exactInfo.tone;
-        searchInfo.textContent = `輸入詞語：${raw}　→　系統直接找到整詞資料　→　韻母：${currentFinalVowel}　→　輸入字數：${currentInputLength}`;
+        applyPronunciationInfo(exactInfo, `輸入詞語：${raw}　→　系統直接找到整詞資料`);
       } else {
-        searchInfo.textContent = `輸入詞語：${raw}　→　系統未找到整詞資料，改取最後一個字：${currentLastChar}　→　輸入字數：${currentInputLength}`;
-
-        const fallbackInfo = await lookupLastCharacterInfo(currentLastChar);
+        const contextText = `輸入詞語：${raw}　→　系統未找到整詞資料，改查最後一個字：${currentLastChar}`;
+        const fallbackInfos = dedupePronunciations(await lookupLastCharacterInfos(currentLastChar));
         if (myToken !== searchToken) return;
 
-        if (!fallbackInfo) {
+        if (!fallbackInfos.length) {
           currentFinalVowel = null;
           currentTone = null;
           finished = true;
+          searchInfo.textContent = contextText;
           message.textContent = `系統沒有最後這個字-${currentLastChar}`;
           return;
         }
 
-        currentFinalVowel = fallbackInfo.final_vowel;
-        currentTone = fallbackInfo.tone;
+        if (fallbackInfos.length === 1) {
+          applyPronunciationInfo(fallbackInfos[0], contextText);
+        } else {
+          searchInfo.textContent = contextText;
+          message.textContent = '';
+          showPronunciationChoices(fallbackInfos, myToken, contextText);
+          return;
+        }
       }
 
       message.textContent = '';
-
       await fetchAndSortSameFinalVowel(myToken);
       if (myToken !== searchToken) return;
 
       if (!sortedRows.length) {
         finished = true;
-        message.textContent = `找到了對應韻母，但沒有可顯示的同韻資料。`;
+        message.textContent = '找到了對應韻母，但沒有可顯示的同韻資料。';
         return;
       }
 
@@ -585,6 +648,9 @@
       console.error(err);
       message.textContent = `查詢失敗：${err.message || err}`;
     } finally {
+      if (!pronunciationPicker.classList.contains('hidden')) {
+        showLoading(false);
+      }
       searchBtn.disabled = false;
       showLoading(false);
     }
