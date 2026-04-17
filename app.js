@@ -113,13 +113,24 @@
     stats.textContent = `查詢詞：${currentQueryTerm}　最後字：${currentLastChar}　韻母：${currentFinalVowel}　聲調：${toneLabel(currentTone)}　字數：${currentInputLength}　排序：先依權重，再同字數優先，再同聲優先，再同組優先　目前顯示：${currentOffset} / ${totalCount}`;
   }
 
-  async function lookupExactTermInfo(term) {
+  async function lookupExactTermInfos(term) {
     const { data, error } = await supabase
       .from(TABLE_NAME)
       .select('id, term, final_vowel, tone, weight, bopomofo')
       .eq('term', term)
       .order('weight', { ascending: false, nullsFirst: false })
-      .order('id', { ascending: true })
+      .order('tone', { ascending: true, nullsFirst: false })
+      .order('id', { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function lookupTermInfoById(id) {
+    const { data, error } = await supabase
+      .from(TABLE_NAME)
+      .select('id, term, final_vowel, tone, weight, bopomofo')
+      .eq('id', id)
       .limit(1);
 
     if (error) throw error;
@@ -555,12 +566,12 @@
       meta.appendChild(createWeightControls(row, item, meta));
 
       termEl.addEventListener('click', async () => {
-        await startSearch(row.term);
+        await startSearch({ term: row.term, rowId: row.id });
       });
       termEl.addEventListener('keydown', async (event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
-          await startSearch(row.term);
+          await startSearch({ term: row.term, rowId: row.id });
         }
       });
 
@@ -586,7 +597,14 @@
     observer.observe(sentinel);
   }
 
-  async function startSearch(explicitTerm) {
+  async function startSearch(explicitInput) {
+    const explicitTerm = typeof explicitInput === 'object' && explicitInput !== null
+      ? explicitInput.term
+      : explicitInput;
+    const explicitRowId = typeof explicitInput === 'object' && explicitInput !== null
+      ? explicitInput.rowId
+      : null;
+
     const raw = normalizeInput(explicitTerm ?? termInput.value);
     resetUI();
 
@@ -604,32 +622,53 @@
     const myToken = ++searchToken;
 
     try {
-      const exactInfo = await lookupExactTermInfo(raw);
-      if (myToken !== searchToken) return;
-
-      if (exactInfo) {
-        applyPronunciationInfo(exactInfo, `輸入詞語：${raw}　→　系統直接找到整詞資料`);
-      } else {
-        const contextText = `輸入詞語：${raw}　→　系統未找到整詞資料，改查最後一個字：${currentLastChar}`;
-        const fallbackInfos = dedupePronunciations(await lookupLastCharacterInfos(currentLastChar));
+      if (explicitRowId != null) {
+        const exactById = await lookupTermInfoById(explicitRowId);
         if (myToken !== searchToken) return;
 
-        if (!fallbackInfos.length) {
-          currentFinalVowel = null;
-          currentTone = null;
-          finished = true;
-          searchInfo.textContent = contextText;
-          message.textContent = `系統沒有最後這個字-${currentLastChar}`;
-          return;
-        }
-
-        if (fallbackInfos.length === 1) {
-          applyPronunciationInfo(fallbackInfos[0], contextText);
+        if (exactById) {
+          applyPronunciationInfo(exactById, `輸入詞語：${raw}　→　系統依編號鎖定指定發音（id=${exactById.id}）`);
         } else {
-          searchInfo.textContent = contextText;
-          message.textContent = '';
-          showPronunciationChoices(fallbackInfos, myToken, contextText);
-          return;
+          message.textContent = `找不到指定編號 id=${explicitRowId}，改用一般查詢。`;
+        }
+      }
+
+      if (!currentFinalVowel) {
+        const exactInfos = dedupePronunciations(await lookupExactTermInfos(raw));
+        if (myToken !== searchToken) return;
+
+        if (exactInfos.length) {
+          const contextText = `輸入詞語：${raw}　→　系統直接找到整詞資料`;
+          if (exactInfos.length === 1) {
+            applyPronunciationInfo(exactInfos[0], contextText);
+          } else {
+            searchInfo.textContent = contextText;
+            message.textContent = '';
+            showPronunciationChoices(exactInfos, myToken, contextText);
+            return;
+          }
+        } else {
+          const contextText = `輸入詞語：${raw}　→　系統未找到整詞資料，改查最後一個字：${currentLastChar}`;
+          const fallbackInfos = dedupePronunciations(await lookupLastCharacterInfos(currentLastChar));
+          if (myToken !== searchToken) return;
+
+          if (!fallbackInfos.length) {
+            currentFinalVowel = null;
+            currentTone = null;
+            finished = true;
+            searchInfo.textContent = contextText;
+            message.textContent = `系統沒有最後這個字-${currentLastChar}`;
+            return;
+          }
+
+          if (fallbackInfos.length === 1) {
+            applyPronunciationInfo(fallbackInfos[0], contextText);
+          } else {
+            searchInfo.textContent = contextText;
+            message.textContent = '';
+            showPronunciationChoices(fallbackInfos, myToken, contextText);
+            return;
+          }
         }
       }
 
